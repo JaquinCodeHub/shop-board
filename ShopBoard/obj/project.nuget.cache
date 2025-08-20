@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "te9WHmu59gE=",
+  "success": true,
+  "projectFilePath": "/home/kino/.containers/dev-all/GitHub/PortafolioTrabajo/shop-board/ShopBoard/ShopBoard.csproj",
+  "expectedPackageFiles": [
+    "/home/kino/.containers/dev-all/.nuget/packages/microsoft.aspnetcore.app.ref/9.0.8/microsoft.aspnetcore.app.ref.9.0.8.nupkg.sha512"
+  ],
+  "logs": []
+}
