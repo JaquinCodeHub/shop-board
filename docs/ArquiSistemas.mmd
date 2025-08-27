@@ -1,0 +1,322 @@
+graph TD
+    %% Comentarios:
+    %% - Arquitectura monolítica para panel administrativo e-commerce con .NET Core
+    %% - Separación por capas: Presentación (MVC), Aplicación (Services), Dominio (Entities), Infraestructura (Data)
+    %% - Entity Framework Core, Identity Framework, SignalR y servicios de fondo con Hangfire
+    %% - Implementa patrones: Repository, Unit of Work, CQRS, Dependency Injection
+
+    %% === USUARIOS Y ROLES ===
+    SuperAdmin[Super Administrador]
+    Admin[Administrador]
+    Manager[Gerente]
+    Employee[Empleado]
+    Auditor[Auditor]
+
+    %% === CAPA DE PRESENTACIÓN (MVC) ===
+    subgraph PRESENTATION ["🎨 Presentation Layer (MVC)"]
+        subgraph MVC_CONTROLLERS ["Controllers & Areas"]
+            HomeController[HomeController<br/>Dashboard Principal]
+            AccountController[AccountController<br/>Autenticación]
+            
+            subgraph ADMIN_AREA ["Area: Admin"]
+                AdminDashboard[DashboardController<br/>Panel Admin]
+                UsersController[UsersController<br/>Gestión Usuarios]
+                RolesController[RolesController<br/>Roles y Permisos]
+                SystemController[SystemController<br/>Configuración]
+                AuditController[AuditController<br/>Auditoría]
+            end
+            
+            subgraph PRODUCTS_AREA ["Area: Products"]
+                ProductsController[ProductsController<br/>CRUD Productos]
+                CategoriesController[CategoriesController<br/>Categorías]
+                InventoryController[InventoryController<br/>Inventario]
+            end
+            
+            subgraph SALES_AREA ["Area: Sales"]
+                OrdersController[OrdersController<br/>Gestión Pedidos]
+                CustomersController[CustomersController<br/>Clientes]
+                ReportsController[ReportsController<br/>Reportes]
+            end
+        end
+        
+        subgraph MVC_VIEWS ["Views & UI Components"]
+            RazorViews[Razor Views<br/>Server-Side Rendering]
+            PartialViews[Partial Views<br/>Componentes Reutilizables]
+            ViewComponents[View Components<br/>Widgets Dashboard]
+            JavaScriptClient[JavaScript/jQuery<br/>Interactividad AJAX]
+            SignalRClient[SignalR Client<br/>Notificaciones Tiempo Real]
+        end
+        
+        subgraph API_CONTROLLERS ["API Controllers"]
+            DashboardAPI[DashboardApiController<br/>Métricas AJAX]
+            NotificationsAPI[NotificationsApiController<br/>Notificaciones]
+            SearchAPI[SearchApiController<br/>Búsquedas AJAX]
+            FileUploadAPI[FileUploadApiController<br/>Subida Archivos]
+        end
+    end
+
+    %% === CAPA DE MIDDLEWARE Y SEGURIDAD ===
+    subgraph MIDDLEWARE ["🔒 Middleware & Security"]
+        AuthenticationMiddleware[Authentication Middleware<br/>JWT + Identity]
+        AuthorizationMiddleware[Authorization Middleware<br/>Policies & Claims]
+        AuditMiddleware[Audit Middleware<br/>Logging Automático]
+        ExceptionMiddleware[Exception Middleware<br/>Error Handling Global]
+        CorsMiddleware[CORS Middleware<br/>Cross-Origin Requests]
+        RateLimitingMiddleware[Rate Limiting<br/>Protección DDoS]
+        SecurityHeadersMiddleware[Security Headers<br/>HSTS, CSP, X-Frame]
+    end
+
+    %% === CAPA DE APLICACIÓN (SERVICIOS) ===
+    subgraph APPLICATION ["🏗️ Application Layer (Services)"]
+        subgraph CORE_SERVICES ["Core Business Services"]
+            UserService[UserService<br/>Gestión Usuarios]
+            ProductService[ProductService<br/>Gestión Productos]
+            CategoryService[CategoryService<br/>Gestión Categorías]
+            OrderService[OrderService<br/>Gestión Pedidos]
+            CustomerService[CustomerService<br/>Gestión Clientes]
+            InventoryService[InventoryService<br/>Control Inventario]
+            ReportService[ReportService<br/>Generación Reportes]
+            NotificationService[NotificationService<br/>Sistema Notificaciones]
+        end
+        
+        subgraph INFRASTRUCTURE_SERVICES ["Infrastructure Services"]
+            EmailService[EmailService<br/>Envío Emails]
+            FileStorageService[FileStorageService<br/>Gestión Archivos]
+            CacheService[CacheService<br/>Redis Caching]
+            AuditService[AuditService<br/>Registro Auditoría]
+            SecurityService[SecurityService<br/>Encriptación]
+            BackgroundJobService[BackgroundJobService<br/>Tareas Asíncronas]
+            ExcelService[ExcelService<br/>Exportación Excel]
+            PdfService[PdfService<br/>Generación PDF]
+        end
+        
+        subgraph INTEGRATION_SERVICES ["Integration Services"]
+            PaymentService[PaymentService<br/>Integración Pagos]
+            ShippingService[ShippingService<br/>Cálculo Envíos]
+            TaxService[TaxService<br/>Cálculo Impuestos]
+            SmsService[SmsService<br/>Notificaciones SMS]
+        end
+    end
+
+    %% === CAPA DE DOMINIO ===
+    subgraph DOMAIN ["💼 Domain Layer"]
+        subgraph ENTITIES ["Domain Entities"]
+            UserEntity[User<br/>Usuarios del Sistema]
+            RoleEntity[Role<br/>Roles y Permisos]
+            ProductEntity[Product<br/>Productos Tienda]
+            CategoryEntity[Category<br/>Categorías]
+            CustomerEntity[Customer<br/>Clientes]
+            OrderEntity[Order<br/>Pedidos]
+            OrderItemEntity[OrderItem<br/>Items Pedido]
+            InventoryMovementEntity[InventoryMovement<br/>Movimientos Stock]
+            AuditLogEntity[AuditLog<br/>Rastro Auditoría]
+            NotificationEntity[Notification<br/>Notificaciones]
+        end
+        
+        subgraph VALUE_OBJECTS ["Value Objects"]
+            Money[Money<br/>Valor Monetario]
+            Address[Address<br/>Dirección]
+            ContactInfo[ContactInfo<br/>Información Contacto]
+            ProductDimensions[ProductDimensions<br/>Dimensiones]
+        end
+        
+        subgraph DOMAIN_SERVICES ["Domain Services"]
+            PricingService[PricingService<br/>Lógica Precios]
+            StockValidationService[StockValidationService<br/>Validación Stock]
+            OrderCalculationService[OrderCalculationService<br/>Cálculos Pedido]
+            InventoryRulesService[InventoryRulesService<br/>Reglas Inventario]
+        end
+    end
+
+    %% === CAPA DE INFRAESTRUCTURA ===
+    subgraph INFRASTRUCTURE ["🔧 Infrastructure Layer"]
+        subgraph DATA_ACCESS ["Data Access"]
+            ApplicationDbContext[ApplicationDbContext<br/>Entity Framework Core]
+            IdentityDbContext[IdentityDbContext<br/>ASP.NET Identity]
+            UnitOfWork[UnitOfWork<br/>Transacciones]
+            
+            subgraph REPOSITORIES ["Repository Pattern"]
+                UserRepository[UserRepository<br/>Acceso Usuarios]
+                ProductRepository[ProductRepository<br/>Acceso Productos]
+                OrderRepository[OrderRepository<br/>Acceso Pedidos]
+                CustomerRepository[CustomerRepository<br/>Acceso Clientes]
+                AuditRepository[AuditRepository<br/>Acceso Auditoría]
+                NotificationRepository[NotificationRepository<br/>Acceso Notificaciones]
+            end
+        end
+        
+        subgraph EXTERNAL_INTEGRATIONS ["External Integrations"]
+            EmailProvider[Email Provider<br/>SendGrid/SMTP]
+            PaymentGateway[Payment Gateway<br/>Stripe/PayPal]
+            FileStorage[File Storage<br/>Azure Blob/AWS S3]
+            SmsProvider[SMS Provider<br/>Twilio]
+            CloudServices[Cloud Services<br/>Azure/AWS]
+        end
+        
+        subgraph BACKGROUND_PROCESSING ["Background Processing"]
+            HangfireServer[Hangfire Server<br/>Background Jobs]
+            RecurringJobs[Recurring Jobs<br/>Tareas Programadas]
+            QueuedJobs[Queued Jobs<br/>Cola Trabajos]
+            JobScheduler[Job Scheduler<br/>Programador Tareas]
+        end
+    end
+
+    %% === CAPA DE BASE DE DATOS ===
+    subgraph DATABASE ["🗄️ Data Storage Layer"]
+        subgraph PRIMARY_DATABASE ["Primary Database"]
+            SqlServer[(SQL Server<br/>Base Datos Principal<br/>Users, Products, Orders)]
+            IdentityTables[(Identity Tables<br/>AspNet Tables<br/>Authentication)]
+        end
+        
+        subgraph CACHING_LAYER ["Caching Layer"]
+            RedisCache[(Redis Cache<br/>Session Store<br/>Distributed Cache)]
+            MemoryCache[(Memory Cache<br/>In-Process Cache<br/>Configuration)]
+        end
+        
+        subgraph FILE_STORAGE ["File Storage"]
+            LocalStorage[(Local File System<br/>Development<br/>Uploaded Files)]
+            CloudStorage[(Cloud Storage<br/>Production<br/>Images, Documents)]
+        end
+        
+        subgraph LOGGING_STORAGE ["Logging & Monitoring"]
+            LogDatabase[(Logging Database<br/>Serilog Sink<br/>Application Logs)]
+            MetricsStorage[(Metrics Storage<br/>Application Insights<br/>Performance Metrics)]
+        end
+    end
+
+    %% === SERVICIOS DE TIEMPO REAL ===
+    subgraph REALTIME ["⚡ Real-time Services"]
+        SignalRHub[SignalR Hub<br/>Notificaciones Tiempo Real]
+        ConnectionManager[Connection Manager<br/>Gestión Conexiones]
+        NotificationHub[Notification Hub<br/>Push Notifications]
+        DashboardHub[Dashboard Hub<br/>Métricas Tiempo Real]
+    end
+
+    %% === SERVICIOS DE CONFIGURACIÓN ===
+    subgraph CONFIGURATION ["⚙️ Configuration & Monitoring"]
+        ConfigurationProvider[Configuration Provider<br/>appsettings.json, Environment]
+        HealthChecks[Health Checks<br/>System Health Monitoring]
+        Logging[Logging<br/>Serilog + File/Console]
+        Monitoring[Application Monitoring<br/>Application Insights]
+        SecurityScanning[Security Scanning<br/>Vulnerability Detection]
+    end
+
+    %% === CONEXIONES PRINCIPALES USUARIOS ===
+    SuperAdmin --> PRESENTATION
+    Admin --> PRESENTATION
+    Manager --> PRESENTATION
+    Employee --> PRESENTATION
+    Auditor --> PRESENTATION
+
+    %% === CONEXIONES PRESENTACIÓN ===
+    PRESENTATION --> MIDDLEWARE
+    MVC_CONTROLLERS --> APPLICATION
+    API_CONTROLLERS --> APPLICATION
+    RazorViews --> JavaScriptClient
+    JavaScriptClient --> SignalRClient
+    SignalRClient --> REALTIME
+
+    %% === CONEXIONES MIDDLEWARE ===
+    MIDDLEWARE --> APPLICATION
+    AuthenticationMiddleware --> IdentityDbContext
+    AuthorizationMiddleware --> UserRepository
+    AuditMiddleware --> AuditService
+
+    %% === CONEXIONES APLICACIÓN ===
+    APPLICATION --> DOMAIN
+    APPLICATION --> INFRASTRUCTURE
+    CORE_SERVICES --> REPOSITORIES
+    INFRASTRUCTURE_SERVICES --> EXTERNAL_INTEGRATIONS
+    INFRASTRUCTURE_SERVICES --> BACKGROUND_PROCESSING
+
+    %% === CONEXIONES DOMINIO ===
+    ENTITIES --> VALUE_OBJECTS
+    ENTITIES --> DOMAIN_SERVICES
+    DOMAIN_SERVICES --> ENTITIES
+
+    %% === CONEXIONES INFRAESTRUCTURA ===
+    INFRASTRUCTURE --> DATABASE
+    ApplicationDbContext --> SqlServer
+    IdentityDbContext --> IdentityTables
+    REPOSITORIES --> ApplicationDbContext
+    UnitOfWork --> ApplicationDbContext
+
+    %% === CONEXIONES BASE DE DATOS ===
+    CORE_SERVICES --> RedisCache
+    CacheService --> RedisCache
+    CacheService --> MemoryCache
+    FileStorageService --> CloudStorage
+    AuditService --> LogDatabase
+    Monitoring --> MetricsStorage
+
+    %% === CONEXIONES TIEMPO REAL ===
+    NotificationService --> SignalRHub
+    REALTIME --> RedisCache
+    SignalRHub --> NotificationRepository
+    DashboardHub --> RedisCache
+
+    %% === CONEXIONES BACKGROUND JOBS ===
+    BackgroundJobService --> HangfireServer
+    ReportService --> QueuedJobs
+    EmailService --> QueuedJobs
+    NotificationService --> RecurringJobs
+    HangfireServer --> SqlServer
+
+    %% === CONEXIONES CONFIGURACIÓN ===
+    APPLICATION --> CONFIGURATION
+    INFRASTRUCTURE --> CONFIGURATION
+    HealthChecks --> DATABASE
+    HealthChecks --> EXTERNAL_INTEGRATIONS
+    Logging --> LogDatabase
+    SecurityScanning --> APPLICATION
+
+    %% === FLUJOS DE DATOS CRÍTICOS ===
+    UserService --> UserRepository
+    UserRepository --> SqlServer
+    ProductService --> ProductRepository
+    ProductRepository --> SqlServer
+    OrderService --> OrderRepository
+    OrderRepository --> SqlServer
+    OrderService --> InventoryService
+    InventoryService --> ProductRepository
+
+    %% === FLUJOS DE AUDITORÍA ===
+    AuditMiddleware --> AuditService
+    AuditService --> AuditRepository
+    AuditRepository --> SqlServer
+    UserService --> AuditService
+    ProductService --> AuditService
+    OrderService --> AuditService
+
+    %% === FLUJOS DE NOTIFICACIONES ===
+    OrderService --> NotificationService
+    InventoryService --> NotificationService
+    NotificationService --> SignalRHub
+    NotificationService --> EmailService
+    EmailService --> EmailProvider
+
+    %% === FLUJOS DE REPORTES ===
+    ReportsController --> ReportService
+    ReportService --> HangfireServer
+    ReportService --> ExcelService
+    ReportService --> PdfService
+    ReportService --> FileStorageService
+
+    %% === FLUJOS DE SEGURIDAD ===
+    AuthenticationMiddleware --> SecurityService
+    SecurityService --> RedisCache
+    SecurityScanning --> Monitoring
+    AuditMiddleware --> SecurityService
+
+    %% === FLUJOS DE CACHÉ ===
+    ProductService --> CacheService
+    UserService --> CacheService
+    CacheService --> RedisCache
+    DashboardAPI --> CacheService
+    CategoryService --> MemoryCache
+
+    %% === FLUJOS DE ARCHIVOS ===
+    ProductsController --> FileUploadAPI
+    FileUploadAPI --> FileStorageService
+    FileStorageService --> CloudStorage
+    FileStorageService --> SecurityService

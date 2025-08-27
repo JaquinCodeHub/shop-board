@@ -1,0 +1,354 @@
+erDiagram
+    %% Comentarios:
+    %% - ERD normalizado para panel administrativo de e-commerce con .NET Core
+    %% - Estructura para administradores, gestión de productos, ventas y reportes
+    %% - Incluye sistema de roles, permisos y auditoría completa
+    %% - Optimizado para análisis de datos y toma de decisiones
+
+    %% === ENTIDADES DE AUTENTICACIÓN Y USUARIOS ===
+    USERS {
+        int id PK "Identity ID autoincremental"
+        nvarchar email UK "Email único para login"
+        nvarchar password_hash "Hash de contraseña"
+        nvarchar first_name "Nombre del usuario"
+        nvarchar last_name "Apellido del usuario"
+        nvarchar phone "Teléfono de contacto"
+        nvarchar avatar_url "URL de foto de perfil"
+        bit is_active "Usuario activo"
+        bit email_confirmed "Email confirmado"
+        datetime2 last_login_at "Último login"
+        datetime2 created_at "Fecha de creación"
+        datetime2 updated_at "Última actualización"
+        int created_by_id FK "Usuario que creó este registro"
+    }
+
+    USER_ROLES {
+        int id PK "Identity ID"
+        int user_id FK "Usuario relacionado"
+        int role_id FK "Rol asignado"
+        datetime2 assigned_at "Fecha de asignación"
+        int assigned_by_id FK "Administrador que asignó"
+        bit is_active "Asignación activa"
+    }
+
+    ROLES {
+        int id PK "Identity ID"
+        nvarchar name UK "Nombre del rol"
+        nvarchar description "Descripción del rol"
+        bit is_system_role "Rol del sistema (no editable)"
+        bit is_active "Rol activo"
+        datetime2 created_at "Fecha de creación"
+    }
+
+    PERMISSIONS {
+        int id PK "Identity ID"
+        nvarchar name UK "Nombre del permiso"
+        nvarchar module "Módulo (Products, Sales, Users, etc.)"
+        nvarchar action "Acción (Create, Read, Update, Delete, Export)"
+        nvarchar description "Descripción del permiso"
+        bit is_active "Permiso activo"
+    }
+
+    ROLE_PERMISSIONS {
+        int id PK "Identity ID"
+        int role_id FK "Rol relacionado"
+        int permission_id FK "Permiso relacionado"
+        datetime2 created_at "Fecha de asignación"
+    }
+
+    USER_SESSIONS {
+        int id PK "Identity ID"
+        int user_id FK "Usuario relacionado"
+        nvarchar token_hash "Hash del JWT token"
+        nvarchar ip_address "IP del cliente"
+        nvarchar user_agent "Navegador del cliente"
+        datetime2 expires_at "Fecha de expiración"
+        bit is_active "Sesión activa"
+        datetime2 created_at "Fecha de creación"
+    }
+
+    %% === ENTIDADES DE PRODUCTOS Y CATEGORÍAS ===
+    CATEGORIES {
+        int id PK "Identity ID"
+        nvarchar name "Nombre de la categoría"
+        nvarchar description "Descripción"
+        nvarchar slug UK "Slug para URL"
+        nvarchar image_url "Imagen de la categoría"
+        int parent_category_id FK "Categoría padre (subcategorías)"
+        int sort_order "Orden de visualización"
+        bit is_active "Categoría activa"
+        datetime2 created_at "Fecha de creación"
+        datetime2 updated_at "Última actualización"
+        int created_by_id FK "Usuario que creó"
+    }
+
+    PRODUCTS {
+        int id PK "Identity ID"
+        nvarchar name "Nombre del producto"
+        nvarchar description "Descripción detallada"
+        nvarchar short_description "Descripción corta"
+        nvarchar sku UK "SKU único del producto"
+        nvarchar barcode "Código de barras"
+        decimal price "Precio actual"
+        decimal cost_price "Precio de costo"
+        decimal compare_at_price "Precio de comparación"
+        int stock_quantity "Cantidad en stock"
+        int min_stock_level "Nivel mínimo de stock"
+        nvarchar weight "Peso del producto"
+        nvarchar dimensions "Dimensiones"
+        bit track_inventory "Seguir inventario"
+        bit is_active "Producto activo"
+        bit is_featured "Producto destacado"
+        datetime2 created_at "Fecha de creación"
+        datetime2 updated_at "Última actualización"
+        int created_by_id FK "Usuario que creó"
+    }
+
+    PRODUCT_CATEGORIES {
+        int id PK "Identity ID"
+        int product_id FK "Producto relacionado"
+        int category_id FK "Categoría relacionada"
+        bit is_primary "Categoría principal"
+        datetime2 created_at "Fecha de asignación"
+    }
+
+    PRODUCT_IMAGES {
+        int id PK "Identity ID"
+        int product_id FK "Producto relacionado"
+        nvarchar image_url "URL de la imagen"
+        nvarchar alt_text "Texto alternativo"
+        int sort_order "Orden de visualización"
+        bit is_primary "Imagen principal"
+        datetime2 created_at "Fecha de subida"
+    }
+
+    PRODUCT_VARIANTS {
+        int id PK "Identity ID"
+        int product_id FK "Producto padre"
+        nvarchar name "Nombre de la variante"
+        nvarchar sku UK "SKU de la variante"
+        decimal price "Precio de la variante"
+        int stock_quantity "Stock de la variante"
+        nvarchar attributes "Atributos JSON (color, talla, etc.)"
+        bit is_active "Variante activa"
+        datetime2 created_at "Fecha de creación"
+    }
+
+    %% === ENTIDADES DE CLIENTES ===
+    CUSTOMERS {
+        int id PK "Identity ID"
+        nvarchar first_name "Nombre del cliente"
+        nvarchar last_name "Apellido del cliente"
+        nvarchar email UK "Email del cliente"
+        nvarchar phone "Teléfono"
+        date date_of_birth "Fecha de nacimiento"
+        nvarchar gender "Género"
+        datetime2 last_order_at "Último pedido"
+        decimal total_spent "Total gastado"
+        int total_orders "Total de pedidos"
+        bit is_active "Cliente activo"
+        datetime2 created_at "Fecha de registro"
+        datetime2 updated_at "Última actualización"
+    }
+
+    CUSTOMER_ADDRESSES {
+        int id PK "Identity ID"
+        int customer_id FK "Cliente relacionado"
+        nvarchar type "Tipo (billing, shipping)"
+        nvarchar first_name "Nombre"
+        nvarchar last_name "Apellido"
+        nvarchar company "Empresa"
+        nvarchar address_line_1 "Dirección línea 1"
+        nvarchar address_line_2 "Dirección línea 2"
+        nvarchar city "Ciudad"
+        nvarchar state "Estado/Provincia"
+        nvarchar postal_code "Código postal"
+        nvarchar country "País"
+        bit is_default "Dirección por defecto"
+        datetime2 created_at "Fecha de creación"
+    }
+
+    %% === ENTIDADES DE PEDIDOS Y VENTAS ===
+    ORDERS {
+        int id PK "Identity ID"
+        nvarchar order_number UK "Número de pedido único"
+        int customer_id FK "Cliente relacionado"
+        nvarchar status "Estado (pending, processing, shipped, delivered, cancelled)"
+        decimal subtotal "Subtotal"
+        decimal tax_amount "Impuestos"
+        decimal shipping_amount "Envío"
+        decimal discount_amount "Descuento"
+        decimal total_amount "Total final"
+        nvarchar currency "Moneda"
+        nvarchar payment_status "Estado de pago"
+        nvarchar payment_method "Método de pago"
+        nvarchar shipping_method "Método de envío"
+        nvarchar notes "Notas del pedido"
+        datetime2 order_date "Fecha del pedido"
+        datetime2 shipped_at "Fecha de envío"
+        datetime2 delivered_at "Fecha de entrega"
+        datetime2 created_at "Fecha de creación"
+        datetime2 updated_at "Última actualización"
+        int processed_by_id FK "Administrador que procesó"
+    }
+
+    ORDER_ITEMS {
+        int id PK "Identity ID"
+        int order_id FK "Pedido relacionado"
+        int product_id FK "Producto relacionado"
+        int product_variant_id FK "Variante del producto"
+        nvarchar product_name "Nombre del producto al momento de la venta"
+        nvarchar product_sku "SKU al momento de la venta"
+        decimal unit_price "Precio unitario"
+        int quantity "Cantidad"
+        decimal line_total "Total de la línea"
+        datetime2 created_at "Fecha de creación"
+    }
+
+    %% === ENTIDADES DE INVENTARIO ===
+    INVENTORY_MOVEMENTS {
+        int id PK "Identity ID"
+        int product_id FK "Producto relacionado"
+        int product_variant_id FK "Variante relacionada"
+        nvarchar movement_type "Tipo (IN, OUT, ADJUSTMENT, RETURN)"
+        int quantity "Cantidad del movimiento"
+        int stock_before "Stock antes del movimiento"
+        int stock_after "Stock después del movimiento"
+        nvarchar reason "Razón del movimiento"
+        nvarchar reference_type "Tipo de referencia (Order, Purchase, Manual)"
+        int reference_id "ID de la referencia"
+        datetime2 created_at "Fecha del movimiento"
+        int created_by_id FK "Usuario que realizó el movimiento"
+    }
+
+    STOCK_ALERTS {
+        int id PK "Identity ID"
+        int product_id FK "Producto relacionado"
+        nvarchar alert_type "Tipo (LOW_STOCK, OUT_OF_STOCK)"
+        int current_stock "Stock actual"
+        int threshold_value "Valor del umbral"
+        bit is_resolved "Alerta resuelta"
+        datetime2 created_at "Fecha de la alerta"
+        datetime2 resolved_at "Fecha de resolución"
+    }
+
+    %% === ENTIDADES DE REPORTES Y ANALYTICS ===
+    REPORTS {
+        int id PK "Identity ID"
+        nvarchar name "Nombre del reporte"
+        nvarchar type "Tipo (sales, products, customers, inventory)"
+        nvarchar parameters "Parámetros JSON del reporte"
+        nvarchar file_path "Ruta del archivo generado"
+        nvarchar format "Formato (PDF, Excel, CSV)"
+        nvarchar status "Estado (generating, completed, failed)"
+        datetime2 start_date "Fecha de inicio del periodo"
+        datetime2 end_date "Fecha de fin del periodo"
+        datetime2 generated_at "Fecha de generación"
+        int generated_by_id FK "Usuario que generó"
+        datetime2 created_at "Fecha de solicitud"
+    }
+
+    DASHBOARD_WIDGETS {
+        int id PK "Identity ID"
+        int user_id FK "Usuario relacionado"
+        nvarchar widget_type "Tipo de widget"
+        nvarchar widget_config "Configuración JSON"
+        int position_x "Posición X en dashboard"
+        int position_y "Posición Y en dashboard"
+        int width "Ancho del widget"
+        int height "Alto del widget"
+        bit is_active "Widget activo"
+        datetime2 created_at "Fecha de creación"
+        datetime2 updated_at "Última actualización"
+    }
+
+    SALES_METRICS {
+        int id PK "Identity ID"
+        date metric_date "Fecha de la métrica"
+        decimal daily_revenue "Ingresos del día"
+        int daily_orders "Pedidos del día"
+        int daily_customers "Clientes únicos del día"
+        decimal avg_order_value "Valor promedio del pedido"
+        int products_sold "Productos vendidos"
+        datetime2 calculated_at "Fecha de cálculo"
+    }
+
+    %% === ENTIDADES DE CONFIGURACIÓN Y AUDITORÍA ===
+    SYSTEM_SETTINGS {
+        int id PK "Identity ID"
+        nvarchar key UK "Clave única"
+        nvarchar value "Valor de la configuración"
+        nvarchar data_type "Tipo de dato"
+        nvarchar category "Categoría"
+        nvarchar description "Descripción"
+        bit is_public "Visible en frontend"
+        datetime2 created_at "Fecha de creación"
+        datetime2 updated_at "Última actualización"
+        int updated_by_id FK "Usuario que actualizó"
+    }
+
+    AUDIT_LOGS {
+        int id PK "Identity ID"
+        int user_id FK "Usuario que realizó la acción"
+        nvarchar entity_type "Tipo de entidad afectada"
+        int entity_id "ID de la entidad"
+        nvarchar action "Acción realizada"
+        nvarchar old_values "Valores anteriores JSON"
+        nvarchar new_values "Valores nuevos JSON"
+        nvarchar ip_address "IP del usuario"
+        nvarchar user_agent "Navegador"
+        datetime2 created_at "Fecha de la acción"
+    }
+
+    NOTIFICATIONS {
+        int id PK "Identity ID"
+        int user_id FK "Usuario destinatario"
+        nvarchar type "Tipo de notificación"
+        nvarchar title "Título"
+        nvarchar message "Mensaje"
+        nvarchar data "Datos adicionales JSON"
+        bit is_read "Notificación leída"
+        datetime2 read_at "Fecha de lectura"
+        datetime2 created_at "Fecha de creación"
+    }
+
+    ACTIVITY_LOGS {
+        int id PK "Identity ID"
+        int user_id FK "Usuario relacionado"
+        nvarchar activity_type "Tipo de actividad"
+        nvarchar description "Descripción de la actividad"
+        nvarchar ip_address "IP del usuario"
+        nvarchar user_agent "Navegador"
+        datetime2 created_at "Fecha de la actividad"
+    }
+
+    %% === RELACIONES ===
+    USERS ||--o{ USER_ROLES : "tiene"
+    USERS ||--o{ USER_SESSIONS : "mantiene"
+    USERS ||--o{ AUDIT_LOGS : "realiza"
+    USERS ||--o{ NOTIFICATIONS : "recibe"
+    USERS ||--o{ DASHBOARD_WIDGETS : "configura"
+
+    ROLES ||--o{ USER_ROLES : "asignado_a"
+    ROLES ||--o{ ROLE_PERMISSIONS : "tiene"
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : "otorgado_en"
+
+    CATEGORIES ||--o{ CATEGORIES : "padre_de"
+    CATEGORIES ||--o{ PRODUCT_CATEGORIES : "contiene"
+    PRODUCTS ||--o{ PRODUCT_CATEGORIES : "pertenece_a"
+    PRODUCTS ||--o{ PRODUCT_IMAGES : "tiene"
+    PRODUCTS ||--o{ PRODUCT_VARIANTS : "tiene"
+    PRODUCTS ||--o{ ORDER_ITEMS : "vendido_en"
+    PRODUCTS ||--o{ INVENTORY_MOVEMENTS : "mueve"
+    PRODUCTS ||--o{ STOCK_ALERTS : "genera"
+
+    CUSTOMERS ||--o{ CUSTOMER_ADDRESSES : "tiene"
+    CUSTOMERS ||--o{ ORDERS : "realiza"
+
+    ORDERS ||--o{ ORDER_ITEMS : "contiene"
+    USERS ||--o{ ORDERS : "procesa"
+
+    USERS ||--o{ REPORTS : "genera"
+    USERS ||--o{ INVENTORY_MOVEMENTS : "registra"
+    USERS ||--o{ SYSTEM_SETTINGS : "actualiza"
+    USERS ||--o{ ACTIVITY_LOGS : "genera"

@@ -1,0 +1,355 @@
+sequenceDiagram
+    %% Comentarios:
+    %% - Diagramas de secuencia para panel administrativo e-commerce con .NET Core MVC
+    %% - Incluye flujos críticos: autenticación, CRUD productos, procesamiento pedidos, reportes
+    %% - Muestra interacciones entre Controllers, Services, Repositories y Entity Framework Core
+    %% - Considera middleware de seguridad, auditoría y notificaciones en tiempo real
+
+    participant U as Usuario Admin
+    participant C as Controller
+    participant M as Middleware
+    participant S as Service
+    participant R as Repository
+    participant EF as Entity Framework
+    participant DB as SQL Server
+    participant Cache as Redis Cache
+    participant BG as Background Jobs
+    participant SR as SignalR Hub
+    participant Email as Email Service
+
+    %% === DIAGRAMA 1: AUTENTICACIÓN Y AUTORIZACIÓN ===
+    Note over U,Email: 🔐 Flujo de Autenticación con ASP.NET Identity
+
+    U->>C: 1. GET /Account/Login
+    C->>C: 2. Retorna LoginViewModel vacío
+    C->>U: 3. Vista Login.cshtml con form
+    U->>C: 4. POST /Account/Login (email, password, rememberMe)
+    C->>M: 5. Pasa por Authentication Middleware
+    M->>M: 6. Valida Anti-CSRF Token
+    C->>S: 7. UserService.ValidateCredentialsAsync()
+    S->>R: 8. UserRepository.GetByEmailAsync(email)
+    R->>EF: 9. Query Users con Include(UserRoles.Role)
+    EF->>DB: 10. SELECT * FROM Users WHERE Email = @email
+    DB->>EF: 11. User entity con navegación
+    EF->>R: 12. User domain object
+    R->>S: 13. User con roles cargados
+    S->>S: 14. PasswordHasher.VerifyHashedPassword()
+    
+    alt Credenciales válidas
+        S->>S: 15. Genera JWT Claims con roles y permisos
+        S->>Cache: 16. Guarda sesión en Redis
+        Cache->>S: 17. Session stored
+        S->>S: 18. Actualiza LastLoginAt
+        S->>R: 19. UserRepository.UpdateAsync(user)
+        R->>EF: 20. context.Update(user)
+        EF->>DB: 21. UPDATE Users SET LastLoginAt = @now
+        DB->>EF: 22. Rows affected
+        S->>C: 23. SignInResult.Success con Claims
+        C->>C: 24. SignInManager.SignInAsync() con cookie
+        C->>M: 25. Pasa por Audit Middleware
+        M->>S: 26. AuditService.LogActivityAsync("Login", userId)
+        S->>EF: 27. Inserta en AuditLogs
+        EF->>DB: 28. INSERT INTO AuditLogs (Action, UserId, IPAddress...)
+        C->>U: 29. Redirect to /Dashboard
+    else Credenciales inválidas
+        S->>C: 15. SignInResult.Failed
+        C->>M: 16. Log intento fallido
+        M->>EF: 17. INSERT INTO ActivityLogs (FailedLogin...)
+        C->>U: 18. Login.cshtml con ModelState error
+    end
+
+    %% === DIAGRAMA 2: CRUD DE PRODUCTOS ===
+    Note over U,Email: 🛍️ Flujo de Creación de Producto
+
+    U->>C: 1. GET /Products/Create (autenticado)
+    C->>M: 2. Authorization Middleware verifica [Permission("Create.Products")]
+    M->>Cache: 3. Verifica permisos en cache
+    Cache->>M: 4. Permisos válidos
+    C->>S: 5. CategoryService.GetAllActiveAsync()
+    S->>R: 6. CategoryRepository.Query().Where(x => x.IsActive)
+    R->>EF: 7. LINQ query con filtro
+    EF->>DB: 8. SELECT * FROM Categories WHERE IsActive = 1
+    DB->>EF: 9. Lista de categorías activas
+    EF->>R: 10. IEnumerable<Category>
+    R->>S: 11. Categorías para dropdown
+    S->>C: 12. Lista de categorías
+    C->>C: 13. Mapea a CreateProductViewModel
+    C->>U: 14. Create.cshtml con formulario
+
+    U->>C: 15. POST /Products/Create (CreateProductViewModel)
+    C->>M: 16. Model Binding y validación
+    M->>M: 17. Valida DataAnnotations y ModelState
+    
+    alt ModelState válido
+        C->>S: 18. ProductService.CreateAsync(createProductDto)
+        S->>S: 19. Valida SKU único
+        S->>R: 20. ProductRepository.GetBySkuAsync(dto.Sku)
+        R->>EF: 21. FirstOrDefaultAsync(x => x.Sku == sku)
+        EF->>DB: 22. SELECT TOP 1 * FROM Products WHERE Sku = @sku
+        DB->>EF: 23. null (SKU disponible)
+        
+        S->>S: 24. Mapea DTO a Product entity
+        S->>S: 25. Asigna CreatedBy = currentUserId
+        S->>R: 26. ProductRepository.AddAsync(product)
+        R->>EF: 27. context.Products.Add(product)
+        
+        loop Para cada categoría seleccionada
+            S->>S: 28. Crea ProductCategory entity
+            S->>R: 29. context.ProductCategories.Add()
+        end
+        
+        S->>EF: 30. UnitOfWork.SaveChangesAsync() - Transaction
+        EF->>DB: 31. BEGIN TRANSACTION
+        EF->>DB: 32. INSERT INTO Products (Name, Sku, Price...)
+        DB->>EF: 33. Product.Id generado (Identity)
+        EF->>DB: 34. INSERT INTO ProductCategories (ProductId, CategoryId)
+        EF->>DB: 35. COMMIT TRANSACTION
+        
+        S->>M: 36. Audit Middleware captura cambios
+        M->>S: 37. AuditService.LogEntityChangeAsync()
+        S->>EF: 38. INSERT INTO AuditLogs (EntityType="Product"...)
+        
+        S->>SR: 39. NotificationService.NotifyProductCreatedAsync()
+        SR->>Cache: 40. Obtiene usuarios conectados con permiso
+        Cache->>SR: 41. Lista de ConnectionIds
+        SR->>U: 42. SignalR push notification "Nuevo producto creado"
+        
+        S->>C: 43. ProductCreatedResult con product.Id
+        C->>C: 44. TempData["Success"] = "Producto creado exitosamente"
+        C->>U: 45. RedirectToAction("Details", new { id = product.Id })
+    else ModelState inválido
+        C->>S: 18. CategoryService.GetAllActiveAsync() (reload)
+        C->>U: 19. Create.cshtml con errores de validación
+    end
+
+    %% === DIAGRAMA 3: PROCESAMIENTO DE PEDIDOS ===
+    Note over U,Email: 📦 Flujo de Procesamiento de Pedido
+
+    U->>C: 1. GET /Sales/Orders/Details/123
+    C->>M: 2. Authorization [Permission("View.Orders")]
+    C->>S: 3. OrderService.GetByIdAsync(123)
+    S->>R: 4. OrderRepository.GetByIdWithIncludesAsync()
+    R->>EF: 5. Include(x => x.OrderItems).ThenInclude(x => x.Product)
+    EF->>DB: 6. SELECT * FROM Orders o JOIN OrderItems oi...
+    DB->>EF: 7. Order completo con items y productos
+    EF->>R: 8. Order domain entity
+    R->>S: 9. Order con navegación cargada
+    S->>C: 10. OrderDetailViewModel
+    C->>U: 11. Details.cshtml con botón "Procesar"
+
+    U->>C: 12. POST /Sales/Orders/Process/123
+    C->>M: 13. Authorization [Permission("Process.Orders")]
+    C->>S: 14. OrderService.ProcessOrderAsync(123, currentUserId)
+    
+    S->>EF: 15. BeginTransactionAsync()
+    EF->>DB: 16. BEGIN TRANSACTION
+    
+    S->>R: 17. OrderRepository.GetByIdAsync(123)
+    R->>EF: 18. Include OrderItems y Products
+    EF->>DB: 19. SELECT con JOIN para verificar stock
+    
+    loop Para cada OrderItem
+        S->>S: 20. Valida stock disponible
+        alt Stock suficiente
+            S->>S: 21. Crea InventoryMovement "OUT"
+            S->>R: 22. InventoryRepository.AddMovementAsync()
+            R->>EF: 23. context.InventoryMovements.Add()
+            S->>S: 24. Actualiza Product.StockQuantity
+            S->>R: 25. ProductRepository.UpdateStockAsync()
+            R->>EF: 26. UPDATE Products SET StockQuantity = StockQuantity - @quantity
+        else Stock insuficiente
+            S->>EF: 27. RollbackTransactionAsync()
+            S->>C: 28. OrderProcessingException("Stock insuficiente")
+            C->>U: 29. Error message en vista
+        end
+    end
+    
+    S->>S: 30. Actualiza Order.Status = "Processing"
+    S->>S: 31. Establece Order.ProcessedById = currentUserId
+    S->>S: 32. Order.ProcessedAt = DateTime.UtcNow
+    S->>R: 33. OrderRepository.UpdateAsync(order)
+    R->>EF: 34. context.Update(order)
+    
+    S->>EF: 35. SaveChangesAsync()
+    EF->>DB: 36. COMMIT TRANSACTION - Todo OK
+    
+    S->>BG: 37. BackgroundJob.Enqueue(() => SendOrderProcessedEmail())
+    BG->>Email: 38. EmailService.SendOrderProcessedAsync(orderId)
+    Email->>U: 39. Email enviado al cliente (asíncrono)
+    
+    S->>SR: 40. NotificationService.NotifyOrderProcessedAsync()
+    SR->>Cache: 41. Usuarios con permiso "View.Orders" online
+    SR->>U: 42. SignalR: "Pedido #123 procesado exitosamente"
+    
+    S->>C: 43. OrderProcessedResult
+    C->>C: 44. TempData["Success"] = "Pedido procesado"
+    C->>U: 45. RedirectToAction("Details", 123)
+
+    %% === DIAGRAMA 4: GENERACIÓN DE REPORTES ===
+    Note over U,Email: 📊 Flujo de Generación de Reporte
+
+    U->>C: 1. GET /Sales/Reports/Sales
+    C->>M: 2. Authorization [Permission("View.Reports")]
+    C->>C: 3. Carga SalesReportViewModel con parámetros por defecto
+    C->>U: 4. SalesReport.cshtml con formulario
+
+    U->>C: 5. POST /Sales/Reports/Sales/Generate (SalesReportViewModel)
+    C->>M: 6. Valida ModelState (fechas, formato)
+    C->>S: 7. ReportService.GenerateSalesReportAsync(parameters)
+    
+    S->>S: 8. Crea Report entity en estado "Generating"
+    S->>R: 9. ReportRepository.AddAsync(report)
+    R->>EF: 10. context.Reports.Add()
+    S->>EF: 11. SaveChangesAsync()
+    EF->>DB: 12. INSERT INTO Reports (Name, Status="Generating"...)
+    
+    S->>BG: 13. BackgroundJob.Enqueue(() => ProcessReportAsync(reportId))
+    BG->>S: 14. ReportService.ProcessReportAsync(reportId) - Ejecuta en background
+    
+    S->>C: 15. ReportRequestedResult con reportId
+    C->>C: 16. TempData["Info"] = "Reporte en proceso, recibirás notificación"
+    C->>U: 17. RedirectToAction("Index") con mensaje
+
+    Note over BG,DB: Background Job Processing
+
+    BG->>S: 18. ProcessReportAsync() ejecutándose en Hangfire
+    S->>R: 19. ReportRepository.GetByIdAsync(reportId)
+    S->>R: 20. OrderRepository.GetSalesDataAsync(startDate, endDate)
+    R->>EF: 21. Complex LINQ query con agregaciones
+    EF->>DB: 22. SELECT con GROUP BY, SUM, COUNT para métricas
+    DB->>EF: 23. Datos agregados de ventas
+    
+    S->>S: 24. ExcelService.CreateSalesReport(data)
+    S->>S: 25. Genera archivo Excel con gráficos
+    S->>S: 26. FileStorageService.SaveReportAsync(fileBytes)
+    S->>S: 27. Actualiza Report.Status = "Completed"
+    S->>S: 28. Report.FilePath = generatedPath
+    
+    S->>R: 29. ReportRepository.UpdateAsync(report)
+    R->>EF: 30. UPDATE Reports SET Status="Completed", FilePath=@path
+    EF->>DB: 31. Report actualizado
+    
+    S->>SR: 32. NotificationService.NotifyReportReadyAsync(userId, reportId)
+    SR->>Cache: 33. Verifica si usuario está online
+    Cache->>SR: 34. Usuario conectado
+    SR->>U: 35. SignalR: "Tu reporte está listo para descarga"
+    
+    S->>S: 36. NotificationService.CreateInAppNotificationAsync()
+    S->>EF: 37. INSERT INTO Notifications (Type="ReportReady"...)
+
+    %% === DIAGRAMA 5: GESTIÓN DE INVENTARIO ===
+    Note over U,Email: 📦 Flujo de Ajuste de Inventario
+
+    U->>C: 1. GET /Products/Inventory/Adjust/456
+    C->>M: 2. Authorization [Permission("Update.Inventory")]
+    C->>S: 3. ProductService.GetByIdAsync(456)
+    S->>R: 4. ProductRepository.GetByIdAsync()
+    R->>EF: 5. FirstOrDefaultAsync(x => x.Id == 456)
+    EF->>DB: 6. SELECT * FROM Products WHERE Id = 456
+    DB->>EF: 7. Product entity
+    S->>C: 8. AdjustStockViewModel con stock actual
+    C->>U: 9. AdjustStock.cshtml con formulario
+
+    U->>C: 10. POST /Products/Inventory/Adjust/456 (AdjustStockViewModel)
+    C->>M: 11. Valida ModelState y business rules
+    C->>S: 12. InventoryService.AdjustStockAsync(dto)
+    
+    S->>EF: 13. BeginTransactionAsync()
+    EF->>DB: 14. BEGIN TRANSACTION
+    
+    S->>R: 15. ProductRepository.GetByIdAsync(456) con lock
+    R->>EF: 16. SELECT con FOR UPDATE (pessimistic lock)
+    EF->>DB: 17. SELECT * FROM Products WHERE Id = 456 FOR UPDATE
+    DB->>EF: 18. Product con lock exclusivo
+    
+    S->>S: 19. Calcula nuevo stock: stockBefore + adjustment
+    
+    alt Nuevo stock >= 0
+        S->>S: 20. Crea InventoryMovement entity
+        S->>S: 21. movement.StockBefore = product.StockQuantity
+        S->>S: 22. movement.StockAfter = newStock
+        S->>S: 23. movement.Reason = "Manual adjustment"
+        S->>S: 24. movement.CreatedById = currentUserId
+        
+        S->>R: 25. InventoryRepository.AddMovementAsync()
+        R->>EF: 26. context.InventoryMovements.Add(movement)
+        
+        S->>S: 27. product.StockQuantity = newStock
+        S->>R: 28. ProductRepository.UpdateAsync(product)
+        R->>EF: 29. context.Update(product)
+        
+        alt Nuevo stock < MinStockLevel
+            S->>S: 30. Crea StockAlert automática
+            S->>R: 31. StockAlertRepository.CreateAlertAsync()
+            R->>EF: 32. context.StockAlerts.Add()
+        end
+        
+        S->>EF: 33. SaveChangesAsync()
+        EF->>DB: 34. COMMIT TRANSACTION
+        
+        S->>SR: 35. NotificationService.NotifyStockAdjustmentAsync()
+        SR->>Cache: 36. Usuarios con permiso online
+        SR->>U: 37. SignalR: "Stock ajustado para Producto #456"
+        
+        S->>C: 38. StockAdjustedResult
+        C->>U: 39. RedirectToAction("Index") con success message
+    else Stock resultante negativo
+        S->>EF: 20. RollbackTransactionAsync()
+        S->>C: 21. ValidationException("Stock no puede ser negativo")
+        C->>U: 22. AdjustStock.cshtml con error
+    end
+
+    %% === DIAGRAMA 6: NOTIFICACIONES EN TIEMPO REAL ===
+    Note over U,Email: 🔔 Flujo de Notificaciones SignalR
+
+    participant Hub as SignalR Hub
+
+    U->>Hub: 1. Conexión WebSocket establecida
+    Hub->>Cache: 2. Almacena connectionId con userId
+    Cache->>Hub: 3. Usuario registrado online
+
+    Note over S,Hub: Evento de negocio ocurre (ej: nuevo pedido)
+
+    S->>S: 4. OrderService detecta nuevo pedido
+    S->>S: 5. NotificationService.NotifyNewOrderAsync()
+    S->>Cache: 6. Obtiene usuarios con permiso "View.Orders"
+    Cache->>S: 7. Lista de userIds con permiso
+    S->>Cache: 8. Filtra usuarios actualmente conectados
+    Cache->>S: 9. Lista de connectionIds activos
+    
+    S->>Hub: 10. Hub.Clients.Clients(connectionIds).SendAsync()
+    Hub->>U: 11. Mensaje push: "Nuevo pedido recibido #789"
+    
+    S->>S: 12. Crea notificación persistente
+    S->>EF: 13. context.Notifications.Add()
+    EF->>DB: 14. INSERT INTO Notifications (UserId, Type, Message...)
+    
+    U->>Hub: 15. Usuario hace clic en notificación
+    Hub->>C: 16. Navegación a /Sales/Orders/Details/789
+    C->>S: 17. NotificationService.MarkAsReadAsync()
+    S->>EF: 18. UPDATE Notifications SET IsRead = 1
+
+    %% === DIAGRAMA 7: AUDITORÍA AUTOMÁTICA ===
+    Note over U,Email: 🔍 Flujo de Auditoría con Middleware
+
+    U->>C: 1. POST /Products/Edit/123 (cualquier cambio)
+    C->>M: 2. AuditMiddleware.InvokeAsync()
+    M->>M: 3. Captura request data (body, headers, user)
+    M->>C: 4. Permite continuar con request
+    C->>S: 5. ProductService.UpdateAsync()
+    S->>EF: 6. ChangeTracker detecta modificaciones
+    EF->>EF: 7. Captura valores originales vs nuevos
+    S->>EF: 8. SaveChangesAsync()
+    EF->>DB: 9. UPDATE Products SET Name = @newName WHERE Id = 123
+    DB->>EF: 10. Cambio confirmado
+    S->>C: 11. UpdateResult success
+    C->>M: 12. Retorna a AuditMiddleware
+    M->>S: 13. AuditService.LogEntityChangeAsync()
+    M->>S: 14. Serializa oldValues y newValues a JSON
+    S->>EF: 15. context.AuditLogs.Add(auditEntry)
+    EF->>DB: 16. INSERT INTO AuditLogs (EntityType, EntityId, Action, OldValues, NewValues, UserId, IPAddress, Timestamp)
+    M->>C: 17. Continúa response pipeline
+    C->>U: 18. Success response con cambios auditados
+
+    %% === NOTA: Patrones implementados ===
+    Note over U,Email: Sistema implementa patrones:<br/>Repository, Unit of Work, CQRS,<br/>Dependency Injection, Audit Trail,<br/>Background Jobs, Real-time updates

@@ -1,0 +1,717 @@
+classDiagram
+    %% Comentarios:
+    %% - Diagrama de clases para panel administrativo e-commerce con .NET Core
+    %% - Arquitectura MVC con Entity Framework Core, Identity y patrones empresariales
+    %% - Incluye DTOs, ViewModels, Services y Repositories para separación de responsabilidades
+    %% - Patrones: Repository, Unit of Work, CQRS, Dependency Injection
+
+    %% === CLASES BASE Y ABSTRACTAS ===
+    class BaseEntity {
+        <<abstract>>
+        +int Id
+        +DateTime CreatedAt
+        +DateTime? UpdatedAt
+        +int? CreatedById
+        +bool IsActive
+        +void SetCreated(int userId)
+        +void SetUpdated(int userId)
+        +bool IsNew()
+    }
+
+    class BaseAuditableEntity {
+        <<abstract>>
+        +int Id
+        +DateTime CreatedAt
+        +DateTime? UpdatedAt
+        +int CreatedById
+        +int? UpdatedById
+        +bool IsDeleted
+        +DateTime? DeletedAt
+        +void MarkAsDeleted(int userId)
+        +void Restore()
+    }
+
+    %% === ENUMS Y VALUE OBJECTS ===
+    class OrderStatus {
+        <<enumeration>>
+        Pending
+        Processing
+        Shipped
+        Delivered
+        Cancelled
+        Returned
+    }
+
+    class PaymentStatus {
+        <<enumeration>>
+        Pending
+        Paid
+        Failed
+        Refunded
+        PartiallyRefunded
+    }
+
+    class MovementType {
+        <<enumeration>>
+        In
+        Out
+        Adjustment
+        Return
+        Transfer
+    }
+
+    class NotificationType {
+        <<enumeration>>
+        LowStock
+        OrderReceived
+        PaymentReceived
+        SystemAlert
+        UserActivity
+    }
+
+    class ReportType {
+        <<enumeration>>
+        Sales
+        Products
+        Customers
+        Inventory
+        Analytics
+    }
+
+    class Money {
+        +decimal Amount
+        +string Currency
+        +Money Add(Money other)
+        +Money Subtract(Money other)
+        +Money Multiply(decimal factor)
+        +string ToString()
+        +bool IsZero()
+    }
+
+    %% === ENTIDADES DE DOMINIO ===
+    class User {
+        +string Email
+        +string PasswordHash
+        +string FirstName
+        +string LastName
+        +string Phone
+        +string AvatarUrl
+        +bool EmailConfirmed
+        +DateTime? LastLoginAt
+        +ICollection~UserRole~ UserRoles
+        +ICollection~UserSession~ Sessions
+        +ICollection~AuditLog~ AuditLogs
+        +ICollection~Notification~ Notifications
+        +void ConfirmEmail()
+        +void UpdateLastLogin()
+        +bool HasPermission(string permission)
+        +bool HasRole(string roleName)
+        +void AddRole(Role role)
+        +void RemoveRole(Role role)
+    }
+
+    class Role {
+        +string Name
+        +string Description
+        +bool IsSystemRole
+        +ICollection~UserRole~ UserRoles
+        +ICollection~RolePermission~ RolePermissions
+        +void AddPermission(Permission permission)
+        +void RemovePermission(Permission permission)
+        +bool HasPermission(Permission permission)
+    }
+
+    class Permission {
+        +string Name
+        +string Module
+        +string Action
+        +string Description
+        +ICollection~RolePermission~ RolePermissions
+        +string GetFullName()
+        +bool IsModulePermission(string module)
+    }
+
+    class UserRole {
+        +int UserId
+        +int RoleId
+        +DateTime AssignedAt
+        +int AssignedById
+        +User User
+        +Role Role
+        +User AssignedBy
+        +bool IsExpired()
+    }
+
+    class UserSession {
+        +int UserId
+        +string TokenHash
+        +string IpAddress
+        +string UserAgent
+        +DateTime ExpiresAt
+        +User User
+        +bool IsExpired()
+        +void Extend(TimeSpan duration)
+        +void Invalidate()
+    }
+
+    %% === ENTIDADES DE PRODUCTOS ===
+    class Category {
+        +string Name
+        +string Description
+        +string Slug
+        +string ImageUrl
+        +int? ParentCategoryId
+        +int SortOrder
+        +Category ParentCategory
+        +ICollection~Category~ SubCategories
+        +ICollection~ProductCategory~ ProductCategories
+        +void UpdateSlug()
+        +bool IsParentOf(Category category)
+        +int GetLevel()
+        +string GetFullPath()
+    }
+
+    class Product {
+        +string Name
+        +string Description
+        +string ShortDescription
+        +string Sku
+        +string Barcode
+        +Money Price
+        +Money CostPrice
+        +Money CompareAtPrice
+        +int StockQuantity
+        +int MinStockLevel
+        +string Weight
+        +string Dimensions
+        +bool TrackInventory
+        +bool IsFeatured
+        +ICollection~ProductCategory~ ProductCategories
+        +ICollection~ProductImage~ Images
+        +ICollection~ProductVariant~ Variants
+        +ICollection~OrderItem~ OrderItems
+        +ICollection~InventoryMovement~ InventoryMovements
+        +void UpdateStock(int quantity, MovementType type)
+        +bool IsLowStock()
+        +bool IsOutOfStock()
+        +Money GetDiscountPercentage()
+        +ProductImage GetPrimaryImage()
+        +void SetFeatured(bool featured)
+    }
+
+    class ProductCategory {
+        +int ProductId
+        +int CategoryId
+        +bool IsPrimary
+        +Product Product
+        +Category Category
+    }
+
+    class ProductImage {
+        +int ProductId
+        +string ImageUrl
+        +string AltText
+        +int SortOrder
+        +bool IsPrimary
+        +Product Product
+        +void SetAsPrimary()
+        +void UpdateSortOrder(int order)
+    }
+
+    class ProductVariant {
+        +int ProductId
+        +string Name
+        +string Sku
+        +Money Price
+        +int StockQuantity
+        +string Attributes
+        +Product Product
+        +Dictionary~string, object~ GetAttributesDictionary()
+        +void UpdateAttributes(Dictionary attributes)
+        +bool HasAttribute(string key)
+    }
+
+    %% === ENTIDADES DE CLIENTES ===
+    class Customer {
+        +string FirstName
+        +string LastName
+        +string Email
+        +string Phone
+        +DateTime? DateOfBirth
+        +string Gender
+        +DateTime? LastOrderAt
+        +Money TotalSpent
+        +int TotalOrders
+        +ICollection~CustomerAddress~ Addresses
+        +ICollection~Order~ Orders
+        +void UpdateTotalSpent(Money amount)
+        +void IncrementOrderCount()
+        +CustomerAddress GetDefaultAddress(string type)
+        +int GetAge()
+        +bool IsVip()
+    }
+
+    class CustomerAddress {
+        +int CustomerId
+        +string Type
+        +string FirstName
+        +string LastName
+        +string Company
+        +string AddressLine1
+        +string AddressLine2
+        +string City
+        +string State
+        +string PostalCode
+        +string Country
+        +bool IsDefault
+        +Customer Customer
+        +void SetAsDefault()
+        +string GetFullAddress()
+        +bool IsShippingAddress()
+        +bool IsBillingAddress()
+    }
+
+    %% === ENTIDADES DE PEDIDOS ===
+    class Order {
+        +string OrderNumber
+        +int CustomerId
+        +OrderStatus Status
+        +Money Subtotal
+        +Money TaxAmount
+        +Money ShippingAmount
+        +Money DiscountAmount
+        +Money TotalAmount
+        +string Currency
+        +PaymentStatus PaymentStatus
+        +string PaymentMethod
+        +string ShippingMethod
+        +string Notes
+        +DateTime OrderDate
+        +DateTime? ShippedAt
+        +DateTime? DeliveredAt
+        +int? ProcessedById
+        +Customer Customer
+        +User ProcessedBy
+        +ICollection~OrderItem~ OrderItems
+        +void UpdateStatus(OrderStatus status, int userId)
+        +void CalculateTotals()
+        +void AddItem(Product product, int quantity, Money unitPrice)
+        +void RemoveItem(int orderItemId)
+        +bool CanBeCancelled()
+        +bool CanBeShipped()
+        +void MarkAsShipped(int userId)
+        +void MarkAsDelivered()
+    }
+
+    class OrderItem {
+        +int OrderId
+        +int ProductId
+        +int? ProductVariantId
+        +string ProductName
+        +string ProductSku
+        +Money UnitPrice
+        +int Quantity
+        +Money LineTotal
+        +Order Order
+        +Product Product
+        +ProductVariant ProductVariant
+        +void UpdateQuantity(int quantity)
+        +void CalculateLineTotal()
+        +Money GetTotalDiscount()
+    }
+
+    %% === ENTIDADES DE INVENTARIO ===
+    class InventoryMovement {
+        +int ProductId
+        +int? ProductVariantId
+        +MovementType MovementType
+        +int Quantity
+        +int StockBefore
+        +int StockAfter
+        +string Reason
+        +string ReferenceType
+        +int? ReferenceId
+        +int CreatedById
+        +Product Product
+        +ProductVariant ProductVariant
+        +User CreatedBy
+        +void ValidateMovement()
+        +bool IsInward()
+        +bool IsOutward()
+    }
+
+    class StockAlert {
+        +int ProductId
+        +string AlertType
+        +int CurrentStock
+        +int ThresholdValue
+        +bool IsResolved
+        +DateTime? ResolvedAt
+        +Product Product
+        +void Resolve()
+        +bool ShouldTrigger(int currentStock)
+        +string GetMessage()
+    }
+
+    %% === SERVICIOS DE APLICACIÓN ===
+    class IUserService {
+        <<interface>>
+        +Task~User~ GetByIdAsync(int id)
+        +Task~User~ GetByEmailAsync(string email)
+        +Task~User~ CreateAsync(CreateUserDto dto)
+        +Task UpdateAsync(int id, UpdateUserDto dto)
+        +Task DeleteAsync(int id)
+        +Task~bool~ ValidateCredentialsAsync(string email, string password)
+        +Task AssignRoleAsync(int userId, int roleId)
+        +Task~IEnumerable~User~~ GetUsersWithRoleAsync(string roleName)
+    }
+
+    class UserService {
+        -IUserRepository _userRepository
+        -IPasswordHasher _passwordHasher
+        -IUnitOfWork _unitOfWork
+        -ILogger~UserService~ _logger
+        +Task~User~ GetByIdAsync(int id)
+        +Task~User~ GetByEmailAsync(string email)
+        +Task~User~ CreateAsync(CreateUserDto dto)
+        +Task UpdateAsync(int id, UpdateUserDto dto)
+        +Task DeleteAsync(int id)
+        +Task~bool~ ValidateCredentialsAsync(string email, string password)
+        +Task AssignRoleAsync(int userId, int roleId)
+        +Task~IEnumerable~User~~ GetUsersWithRoleAsync(string roleName)
+    }
+
+    class IProductService {
+        <<interface>>
+        +Task~Product~ GetByIdAsync(int id)
+        +Task~Product~ GetBySkuAsync(string sku)
+        +Task~IEnumerable~Product~~ GetAllAsync(ProductFilterDto filter)
+        +Task~Product~ CreateAsync(CreateProductDto dto)
+        +Task UpdateAsync(int id, UpdateProductDto dto)
+        +Task DeleteAsync(int id)
+        +Task UpdateStockAsync(int productId, int quantity, MovementType type)
+        +Task~IEnumerable~Product~~ GetLowStockProductsAsync()
+    }
+
+    class ProductService {
+        -IProductRepository _productRepository
+        -IInventoryService _inventoryService
+        -IUnitOfWork _unitOfWork
+        -ILogger~ProductService~ _logger
+        +Task~Product~ GetByIdAsync(int id)
+        +Task~Product~ GetBySkuAsync(string sku)
+        +Task~IEnumerable~Product~~ GetAllAsync(ProductFilterDto filter)
+        +Task~Product~ CreateAsync(CreateProductDto dto)
+        +Task UpdateAsync(int id, UpdateProductDto dto)
+        +Task DeleteAsync(int id)
+        +Task UpdateStockAsync(int productId, int quantity, MovementType type)
+        +Task~IEnumerable~Product~~ GetLowStockProductsAsync()
+    }
+
+    class IOrderService {
+        <<interface>>
+        +Task~Order~ GetByIdAsync(int id)
+        +Task~Order~ GetByOrderNumberAsync(string orderNumber)
+        +Task~IEnumerable~Order~~ GetAllAsync(OrderFilterDto filter)
+        +Task~Order~ CreateAsync(CreateOrderDto dto)
+        +Task UpdateStatusAsync(int orderId, OrderStatus status, int userId)
+        +Task~DashboardStatsDto~ GetDashboardStatsAsync()
+        +Task~IEnumerable~Order~~ GetRecentOrdersAsync(int count)
+    }
+
+    class OrderService {
+        -IOrderRepository _orderRepository
+        -ICustomerService _customerService
+        -IProductService _productService
+        -IInventoryService _inventoryService
+        -INotificationService _notificationService
+        -IUnitOfWork _unitOfWork
+        -ILogger~OrderService~ _logger
+        +Task~Order~ GetByIdAsync(int id)
+        +Task~Order~ GetByOrderNumberAsync(string orderNumber)
+        +Task~IEnumerable~Order~~ GetAllAsync(OrderFilterDto filter)
+        +Task~Order~ CreateAsync(CreateOrderDto dto)
+        +Task UpdateStatusAsync(int orderId, OrderStatus status, int userId)
+        +Task~DashboardStatsDto~ GetDashboardStatsAsync()
+        +Task~IEnumerable~Order~~ GetRecentOrdersAsync(int count)
+    }
+
+    class IReportService {
+        <<interface>>
+        +Task~byte[]~ GenerateSalesReportAsync(ReportParametersDto parameters)
+        +Task~byte[]~ GenerateProductsReportAsync(ReportParametersDto parameters)
+        +Task~byte[]~ GenerateCustomersReportAsync(ReportParametersDto parameters)
+        +Task~byte[]~ GenerateInventoryReportAsync(ReportParametersDto parameters)
+        +Task~Report~ CreateReportRequestAsync(CreateReportDto dto)
+        +Task~IEnumerable~Report~~ GetUserReportsAsync(int userId)
+    }
+
+    class ReportService {
+        -IReportRepository _reportRepository
+        -IOrderRepository _orderRepository
+        -IProductRepository _productRepository
+        -ICustomerRepository _customerRepository
+        -IExcelService _excelService
+        -IPdfService _pdfService
+        -IUnitOfWork _unitOfWork
+        -ILogger~ReportService~ _logger
+        +Task~byte[]~ GenerateSalesReportAsync(ReportParametersDto parameters)
+        +Task~byte[]~ GenerateProductsReportAsync(ReportParametersDto parameters)
+        +Task~byte[]~ GenerateCustomersReportAsync(ReportParametersDto parameters)
+        +Task~byte[]~ GenerateInventoryReportAsync(ReportParametersDto parameters)
+        +Task~Report~ CreateReportRequestAsync(CreateReportDto dto)
+        +Task~IEnumerable~Report~~ GetUserReportsAsync(int userId)
+    }
+
+    %% === REPOSITORIOS ===
+    class IRepository~T~ {
+        <<interface>>
+        +Task~T~ GetByIdAsync(int id)
+        +Task~IEnumerable~T~~ GetAllAsync()
+        +Task~T~ AddAsync(T entity)
+        +Task UpdateAsync(T entity)
+        +Task DeleteAsync(int id)
+        +Task~bool~ ExistsAsync(int id)
+        +IQueryable~T~ Query()
+    }
+
+    class BaseRepository~T~ {
+        <<abstract>>
+        #ApplicationDbContext _context
+        #DbSet~T~ _dbSet
+        +Task~T~ GetByIdAsync(int id)
+        +Task~IEnumerable~T~~ GetAllAsync()
+        +Task~T~ AddAsync(T entity)
+        +Task UpdateAsync(T entity)
+        +Task DeleteAsync(int id)
+        +Task~bool~ ExistsAsync(int id)
+        +IQueryable~T~ Query()
+    }
+
+    class IUserRepository {
+        <<interface>>
+        +Task~User~ GetByEmailAsync(string email)
+        +Task~IEnumerable~User~~ GetUsersWithRoleAsync(string roleName)
+        +Task~bool~ EmailExistsAsync(string email)
+    }
+
+    class UserRepository {
+        +Task~User~ GetByEmailAsync(string email)
+        +Task~IEnumerable~User~~ GetUsersWithRoleAsync(string roleName)
+        +Task~bool~ EmailExistsAsync(string email)
+    }
+
+    class IProductRepository {
+        <<interface>>
+        +Task~Product~ GetBySkuAsync(string sku)
+        +Task~IEnumerable~Product~~ GetLowStockProductsAsync()
+        +Task~IEnumerable~Product~~ GetFeaturedProductsAsync()
+        +Task~IEnumerable~Product~~ SearchAsync(string searchTerm)
+    }
+
+    class ProductRepository {
+        +Task~Product~ GetBySkuAsync(string sku)
+        +Task~IEnumerable~Product~~ GetLowStockProductsAsync()
+        +Task~IEnumerable~Product~~ GetFeaturedProductsAsync()
+        +Task~IEnumerable~Product~~ SearchAsync(string searchTerm)
+    }
+
+    %% === CONTROLADORES MVC ===
+    class DashboardController {
+        -IOrderService _orderService
+        -IProductService _productService
+        -ICustomerService _customerService
+        -IMapper _mapper
+        +Task~IActionResult~ Index()
+        +Task~IActionResult~ GetSalesChart(ChartParametersDto parameters)
+        +Task~IActionResult~ GetTopProducts(int count)
+        +Task~IActionResult~ GetRecentOrders(int count)
+        +Task~IActionResult~ GetStats()
+    }
+
+    class ProductsController {
+        -IProductService _productService
+        -ICategoryService _categoryService
+        -IMapper _mapper
+        +Task~IActionResult~ Index(ProductFilterDto filter)
+        +Task~IActionResult~ Details(int id)
+        +Task~IActionResult~ Create()
+        +Task~IActionResult~ Create(CreateProductViewModel model)
+        +Task~IActionResult~ Edit(int id)
+        +Task~IActionResult~ Edit(int id, UpdateProductViewModel model)
+        +Task~IActionResult~ Delete(int id)
+        +Task~IActionResult~ UpdateStock(int id, UpdateStockViewModel model)
+    }
+
+    class OrdersController {
+        -IOrderService _orderService
+        -ICustomerService _customerService
+        -IMapper _mapper
+        +Task~IActionResult~ Index(OrderFilterDto filter)
+        +Task~IActionResult~ Details(int id)
+        +Task~IActionResult~ UpdateStatus(int id, OrderStatus status)
+        +Task~IActionResult~ ProcessOrder(int id)
+        +Task~IActionResult~ ShipOrder(int id)
+        +Task~IActionResult~ CancelOrder(int id)
+    }
+
+    class UsersController {
+        -IUserService _userService
+        -IRoleService _roleService
+        -IMapper _mapper
+        +Task~IActionResult~ Index(UserFilterDto filter)
+        +Task~IActionResult~ Details(int id)
+        +Task~IActionResult~ Create()
+        +Task~IActionResult~ Create(CreateUserViewModel model)
+        +Task~IActionResult~ Edit(int id)
+        +Task~IActionResult~ Edit(int id, UpdateUserViewModel model)
+        +Task~IActionResult~ AssignRole(int id, int roleId)
+        +Task~IActionResult~ RemoveRole(int id, int roleId)
+    }
+
+    class ReportsController {
+        -IReportService _reportService
+        -IMapper _mapper
+        +Task~IActionResult~ Index()
+        +Task~IActionResult~ SalesReport()
+        +Task~IActionResult~ GenerateSalesReport(SalesReportViewModel model)
+        +Task~IActionResult~ ProductsReport()
+        +Task~IActionResult~ GenerateProductsReport(ProductsReportViewModel model)
+        +Task~IActionResult~ CustomersReport()
+        +Task~IActionResult~ GenerateCustomersReport(CustomersReportViewModel model)
+        +Task~IActionResult~ DownloadReport(int reportId)
+    }
+
+    %% === DTOs Y VIEWMODELS ===
+    class CreateUserDto {
+        +string Email
+        +string Password
+        +string FirstName
+        +string LastName
+        +string Phone
+        +List~int~ RoleIds
+    }
+
+    class UpdateUserDto {
+        +string FirstName
+        +string LastName
+        +string Phone
+        +bool IsActive
+    }
+
+    class CreateProductDto {
+        +string Name
+        +string Description
+        +string ShortDescription
+        +string Sku
+        +decimal Price
+        +decimal CostPrice
+        +int StockQuantity
+        +List~int~ CategoryIds
+        +List~IFormFile~ Images
+    }
+
+    class DashboardViewModel {
+        +int TotalOrders
+        +decimal TotalRevenue
+        +int TotalCustomers
+        +int TotalProducts
+        +List~ChartDataPoint~ SalesChart
+        +List~ProductDto~ TopProducts
+        +List~OrderDto~ RecentOrders
+        +List~NotificationDto~ Notifications
+    }
+
+    %% === CONFIGURACIÓN Y CONTEXTO ===
+    class ApplicationDbContext {
+        +DbSet~User~ Users
+        +DbSet~Role~ Roles
+        +DbSet~Permission~ Permissions
+        +DbSet~Product~ Products
+        +DbSet~Category~ Categories
+        +DbSet~Customer~ Customers
+        +DbSet~Order~ Orders
+        +DbSet~OrderItem~ OrderItems
+        +DbSet~InventoryMovement~ InventoryMovements
+        +DbSet~Report~ Reports
+        +DbSet~AuditLog~ AuditLogs
+        +DbSet~Notification~ Notifications
+        #void OnModelCreating(ModelBuilder modelBuilder)
+        +Task~int~ SaveChangesAsync(CancellationToken cancellationToken)
+    }
+
+    class IUnitOfWork {
+        <<interface>>
+        +IUserRepository Users
+        +IProductRepository Products
+        +IOrderRepository Orders
+        +ICustomerRepository Customers
+        +Task~int~ SaveChangesAsync()
+        +Task BeginTransactionAsync()
+        +Task CommitTransactionAsync()
+        +Task RollbackTransactionAsync()
+    }
+
+    class UnitOfWork {
+        -ApplicationDbContext _context
+        -IDbContextTransaction _transaction
+        +IUserRepository Users
+        +IProductRepository Products
+        +IOrderRepository Orders
+        +ICustomerRepository Customers
+        +Task~int~ SaveChangesAsync()
+        +Task BeginTransactionAsync()
+        +Task CommitTransactionAsync()
+        +Task RollbackTransactionAsync()
+        +void Dispose()
+    }
+
+    %% === RELACIONES DE HERENCIA ===
+    BaseEntity <|-- BaseAuditableEntity
+    BaseAuditableEntity <|-- User
+    BaseAuditableEntity <|-- Product
+    BaseAuditableEntity <|-- Category
+    BaseAuditableEntity <|-- Customer
+    BaseAuditableEntity <|-- Order
+    BaseEntity <|-- Role
+    BaseEntity <|-- Permission
+    BaseEntity <|-- OrderItem
+    BaseEntity <|-- InventoryMovement
+
+    %% === RELACIONES DE IMPLEMENTACIÓN ===
+    IRepository~T~ <|-- BaseRepository~T~
+    BaseRepository~T~ <|-- UserRepository
+    BaseRepository~T~ <|-- ProductRepository
+    IUserRepository <|-- UserRepository
+    IProductRepository <|-- ProductRepository
+
+    IUserService <|-- UserService
+    IProductService <|-- ProductService
+    IOrderService <|-- OrderService
+    IReportService <|-- ReportService
+
+    %% === RELACIONES DE COMPOSICIÓN ===
+    User "1" *-- "0..*" UserRole : tiene
+    User "1" *-- "0..*" UserSession : mantiene
+    Role "1" *-- "0..*" UserRole : asignado_a
+    Role "1" *-- "0..*" RolePermission : tiene
+
+    Product "1" *-- "0..*" ProductImage : contiene
+    Product "1" *-- "0..*" ProductVariant : tiene
+    Product "1" *-- "0..*" ProductCategory : pertenece_a
+    Category "1" *-- "0..*" ProductCategory : contiene
+
+    Customer "1" *-- "0..*" CustomerAddress : tiene
+    Customer "1" *-- "0..*" Order : realiza
+    Order "1" *-- "1..*" OrderItem : contiene
+
+    Product "1" *-- "0..*" InventoryMovement : mueve
+    Product "1" *-- "0..*" StockAlert : genera
+
+    %% === RELACIONES DE DEPENDENCIA ===
+    UserService --> IUserRepository : usa
+    ProductService --> IProductRepository : usa
+    OrderService --> IOrderRepository : usa
+    DashboardController --> IOrderService : usa
+    ProductsController --> IProductService : usa
+    ApplicationDbContext --> IUnitOfWork : implementa
